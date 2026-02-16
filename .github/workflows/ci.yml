@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+
+env:
+  RAILS_ENV: test
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hgv_signing_test
+
+jobs:
+  rspec:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: hgv_signing_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            postgresql-client libpq-dev libvips-dev libvips42 \
+            wget curl imagemagick ca-certificates gnupg
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.2"
+          bundler-cache: true
+          cache-version: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Install PDFium
+        run: |
+          wget -q -O /tmp/pdfium-linux.tgz "https://github.com/docusealco/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz"
+          mkdir -p /tmp/pdfium-linux && tar -xzf /tmp/pdfium-linux.tgz -C /tmp/pdfium-linux
+          sudo cp /tmp/pdfium-linux/lib/libpdfium.so /usr/lib/libpdfium.so && sudo ldconfig
+          rm -rf /tmp/pdfium-linux.tgz /tmp/pdfium-linux
+
+      - name: Install ONNX Runtime
+        run: |
+          wget -q -O /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
+          tar -xzf /tmp/onnxruntime.tgz -C /usr/local
+          sudo ln -sf /usr/local/onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3 /usr/lib/libonnxruntime.so.1
+          sudo ln -sf /usr/lib/libonnxruntime.so.1 /usr/lib/libonnxruntime.so && sudo ldconfig
+          rm /tmp/onnxruntime.tgz
+
+      - name: Install dependencies
+        run: |
+          bundle config set --local path 'vendor/bundle'
+          bundle config set --local without 'development'
+          bundle config set --local with 'test'
+          bundle install --jobs $(nproc) --retry 3 --quiet
+          yarn install --frozen-lockfile
+
+      - name: Setup database
+        run: bundle exec rake db:create db:migrate
+
+      - name: Run RSpec
+        run: bundle exec rspec --format progress --format RspecJunitFormatter --out rspec.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rspec-results
+          path: rspec.xml
+          retention-days: 7
+
+  rubocop:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4.2"
+          bundler-cache: true
+
+      - name: Run Rubocop
+        run: bundle exec rubocop --parallel --format simple
