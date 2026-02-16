@@ -1,0 +1,86 @@
+<div class="flex flex-wrap space-y-4 md:flex-nowrap md:space-y-0">
+  <%= render 'shared/settings_nav' %>
+  <div class="flex-grow max-w-xl mx-auto">
+    <h1 class="text-4xl font-bold mb-4">
+      <%= t('account') %>
+    </h1>
+    <%= form_for '', url: settings_account_path, method: :patch, html: { autocomplete: 'off', class: 'space-y-4' } do |f| %>
+      <%= fields_for current_account do |ff| %>
+        <div class="form-control">
+          <%= ff.label :name, t('company_name'), class: 'label' %>
+          <%= ff.text_field :name, required: true, class: 'base-input', dir: 'auto' %>
+        </div>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="form-control">
+            <%= ff.label :timezone, t('time_zone'), class: 'label' %>
+            <%= ff.select :timezone, nil, {}, class: 'base-select' do %>
+              <% tzinfo = TZInfo::Timezone.get(ActiveSupport::TimeZone::MAPPING[current_account.timezone] || current_account.timezone) %>
+              <% items = ActiveSupport::TimeZone.all.map { |z| [z.to_s, z.name] } %>
+              <% items.unshift([tzinfo.to_s, current_account.timezone]) unless ActiveSupport::TimeZone.all.find { |e| e.tzinfo == tzinfo } %>
+              <%= options_for_select(items, current_account.timezone) %>
+            <% end %>
+          </div>
+          <div class="form-control">
+            <%= ff.label :locale, t('language'), class: 'label' %>
+            <%= ff.select :locale, options_for_select(AccountsController::LOCALE_OPTIONS.invert, current_account.locale), {}, class: 'base-select' %>
+          </div>
+        </div>
+      <% end %>
+      <% encrypted_config = @encrypted_config || EncryptedConfig.find_or_initialize_by(account: current_account, key: EncryptedConfig::APP_URL_KEY) %>
+      <% if !Docuseal.multitenant? && can?(:manage, encrypted_config) && !current_account.testing? && ENV['APP_URL'].blank? %>
+        <%= fields_for encrypted_config do |ff| %>
+          <div class="form-control">
+            <%= ff.label :value, t('app_url'), class: 'label' %>
+            <%= ff.text_field :value, autocomplete: 'off', class: 'base-input' %>
+          </div>
+        <% end %>
+      <% end %>
+      <% if can?(:update, current_account) %>
+        <div class="form-control pt-2">
+          <%= f.button button_title(title: t('update'), disabled_with: t('updating')), class: 'base-button' %>
+        </div>
+      <% end %>
+    <% end %>
+    <% if can?(:manage, AccountConfig) %>
+      <div class="px-1 mt-8">
+        <% if can?(:manage, :personalization_advanced) %>
+          <% account_config = AccountConfig.find_or_initialize_by(account: current_account, key: AccountConfig::WITH_FILE_LINKS_KEY) %>
+          <% if can?(:manage, account_config) %>
+            <%= form_for account_config, url: account_configs_path, method: :post do |f| %>
+              <%= f.hidden_field :key %>
+              <div class="flex items-center justify-between gap-4 py-2.5">
+                <div class="flex items-center space-x-1">
+                  <span class="text-left"><%= t('use_direct_file_attachment_links_in_the_documents') %></span>
+                </div>
+                <submit-form data-on="change" class="flex">
+                  <%= f.check_box :value, class: 'toggle', checked: account_config.value %>
+                </submit-form>
+              </div>
+            <% end %>
+          <% end %>
+        <% end %>
+        <%= render 'extra_preferences' %>
+        <% if !Docuseal.multitenant? && SearchEntry.table_exists? && (!Docuseal.fulltext_search? || params[:reindex] == 'true') && can?(:manage, EncryptedConfig) %>
+          <div class="flex items-center justify-between gap-4 py-2.5">
+            <span>
+              <%= t('efficient_search_with_search_index') %>
+            </span>
+            <%= button_to params[:reindex] == 'true' ? t('reindex') : t('build_search_index'), settings_search_entries_reindex_index_path, method: :post, class: 'btn btn-sm btn-neutral text-white px-4' %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+    <%= render 'compliances' %>
+    <%= render 'integrations' %>
+    <% if can?(:manage, current_account) && Docuseal.multitenant? && true_user == current_user %>
+      <div class="px-1 mt-8">
+        <h2 class="text-2xl font-bold mb-2">
+          <%= t('danger_zone') %>
+        </h2>
+        <%= button_to button_title(title: t('delete_my_account')), settings_account_path, class: 'btn btn-outline btn-error block', data: { turbo_confirm: t('you_are_scheduling_your_account_for_deletion_after_deletion_your_data_will_be_permanently_removed_and_cannot_be_recovered_click_ok_if_you_would_like_to_continue') }, method: :delete, id: :account_delete_button %>
+      </div>
+    <% end %>
+  </div>
+  <div class="w-0 md:w-52"></div>
+</div>
+<%= render 'shared/app_tour', type: 'account' %>

@@ -1,0 +1,41 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch('RAILS_MAX_THREADS', 15).to_i + ENV.fetch('SIDEKIQ_THREADS', 5).to_i %>
+
+development:
+  <<: *default
+  host: <%= ENV.fetch('DATABASE_HOST', '127.0.0.1') %>
+  port: <%= ENV.fetch('DATABASE_PORT', '5433') %>
+  username: <%= ENV.fetch('DATABASE_USER', 'postgres') %>
+  password: <%= ENV.fetch('DATABASE_PASSWORD', 'postgres') %>
+  database: docuseal_dev
+
+test:
+  <<: *default
+  host: <%= ENV.fetch('DATABASE_HOST', '127.0.0.1') %>
+  port: <%= ENV.fetch('DATABASE_PORT', '5433') %>
+  username: <%= ENV.fetch('DATABASE_USER', 'postgres') %>
+  password: <%= ENV.fetch('DATABASE_PASSWORD', 'postgres') %>
+  database: docuseal_test
+
+production:
+<% if !ENV['DATABASE_HOST'].to_s.empty? %>
+  <<: *default
+  host: <%= ENV['DATABASE_HOST'] %>
+  port: <%= ENV['DATABASE_PORT'] %>
+  username: <%= ENV['DATABASE_USER'] %>
+  password: <%= ENV['DATABASE_PASSWORD'] %>
+  database: <%= ENV['DATABASE_NAME'] %>
+  <% if !ENV['DATABASE_SEARCH_PATH'].to_s.empty? %>
+  search_path: <%= ENV['DATABASE_SEARCH_PATH'] %>
+  <% end %>
+<% elsif ENV['DATABASE_URL'].to_s.empty? %>
+  adapter: sqlite3
+  database: <%= ENV['WORKDIR'] || '.' %>/db.sqlite3
+  pool: <%= ENV.fetch('RAILS_MAX_THREADS', 15).to_i + ENV.fetch('SIDEKIQ_THREADS', 5).to_i %>
+  timeout: 5000
+<% elsif ENV['DATABASE_URL'].match?(/\Apostgres/) %>
+  <<: *default
+  url: <%= ENV['DATABASE_URL'] %>
+<% end %>

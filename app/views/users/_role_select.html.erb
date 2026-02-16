@@ -1,0 +1,4 @@
+<div class="form-control">
+  <%= f.label :role, class: 'label' %>
+  <%= f.select :role, options_for_select([[t('admin'), 'admin'], [t('editor'), 'editor']], f.object.role), {}, class: 'base-select' %>
+</div>

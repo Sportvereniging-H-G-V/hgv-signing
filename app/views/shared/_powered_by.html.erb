@@ -1,0 +1,13 @@
+<% tagline = 'HGV Signing — beheer door Rubenrikk' %>
+<div class="text-center px-2">
+  <% if local_assigns[:with_counter] %>
+    <% count = CompletedSubmitter.distinct.count(:submission_id) %>
+    <% if count > 1 %>
+      <%= t('count_documents_signed_with_html', count:) %> <%= tagline %>
+    <% else %>
+      <%= tagline %>
+    <% end %>
+  <% else %>
+    <%= tagline %>
+  <% end %>
+</div>

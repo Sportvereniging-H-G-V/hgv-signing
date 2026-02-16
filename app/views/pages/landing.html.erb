@@ -1,0 +1,77 @@
+<section class="flex items-center justify-center">
+  <div class="py-10 mx-auto max-w-7xl">
+    <div class="max-w-xl mx-auto">
+      <div class="text-center">
+        <div class="relative flex flex-col items-center">
+          <%= render 'shared/logo', width: '100', height: '100' %>
+          <h1 class="text-6xl font-bold mt-4 mb-4">
+            <%= t('welcome_to_hgv_signing') %>
+          </h1>
+          <% if Docuseal.version.present? %>
+            <span class="badge badge-outline badge-lg block mx-auto">
+              v<%= Docuseal.version %>
+            </span>
+          <% end %>
+        </div>
+        <h2 class="mt-4 mb-16 text-lg text-center text-gray-600">
+          <%= t('landing_page_subtitle', account_name: (current_account&.name || Account.first&.name || t('your_organization'))) %>
+        </h2>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 gap-12 md:gap-10 md:grid-cols-2">
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="text-center transition-all">
+            <div class="inline-block p-4 mb-4 -mt-16 bg-base-content rounded-full">
+              <%= svg_icon('login', class: 'w-10 h-10 text-base-100') %>
+            </div>
+            <h3 class="mb-4 text-2xl font-semibold"><%= t('login_as_user') %></h3>
+            <p class="text-base text-gray-500">
+              <%= t('login_as_user_description') %>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="text-center transition-all">
+            <div class="inline-block p-4 mb-4 -mt-16 bg-base-content rounded-full">
+              <%= svg_icon('mail', class: 'w-10 h-10 text-base-100') %>
+            </div>
+            <h3 class="mb-4 text-2xl font-semibold"><%= t('sign_documents_via_email') %></h3>
+            <p class="text-base text-gray-500">
+              <%= t('sign_documents_via_email_description') %>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="text-center transition-all">
+            <div class="inline-block p-4 mb-4 -mt-16 bg-base-content rounded-full">
+              <%= svg_icon('mail_up', class: 'w-10 h-10 text-base-100') %>
+            </div>
+            <h3 class="mb-4 text-2xl font-semibold"><%= t('request_new_link') %></h3>
+            <p class="text-base text-gray-500">
+              <%= t('request_new_link_description') %>
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="card bg-base-200">
+        <div class="card-body">
+          <div class="text-center transition-all">
+            <div class="inline-block p-4 mb-4 -mt-16 bg-base-content rounded-full">
+              <%= svg_icon('shield_check', class: 'w-10 h-10 text-base-100') %>
+            </div>
+            <h3 class="mb-4 text-2xl font-semibold"><%= t('secure_and_reliable') %></h3>
+            <p class="text-base text-gray-500">
+              <%= t('secure_and_reliable_description') %>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<%= render 'shared/attribution', with_counter: true %>

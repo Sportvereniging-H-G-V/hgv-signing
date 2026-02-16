@@ -1,0 +1,75 @@
+<%= render 'shared/navbar_warning' %>
+<div class="max-w-6xl mb-4 mx-auto px-4 md:px-2 py-3 flex items-center justify-between">
+  <div class="flex items-center space-x-4">
+    <a href="<%= root_path({ lang: params[:lang] }.compact_blank) %>" class="text-2xl font-bold items-center flex space-x-2">
+      <%= render 'shared/title' %>
+    </a>
+  </div>
+  <% if signed_in? %>
+    <div class="space-x-4 flex items-center">
+      <div class="flex items-center justify-center space-x-4 mr-1">
+        <%= render 'shared/navbar_buttons' %>
+        <%= link_to t('settings'), settings_profile_index_path, class: 'hidden md:inline-flex font-medium text-lg', id: 'account_settings_button' %>
+      </div>
+      <div class="dropdown dropdown-end">
+        <label tabindex="0" class="cursor-pointer bg-base-content text-purple-300 rounded-full p-2 w-9 justify-center flex">
+          <span class="text-sm align-text-top"><%= current_user.initials %></span>
+        </label>
+        <ul tabindex="0" class="z-10 dropdown-content p-2 mt-2 shadow menu text-base bg-base-100 rounded-box min-w-[160px] text-right">
+          <li>
+            <%= link_to settings_profile_index_path, class: 'flex items-center' do %>
+              <%= svg_icon('adjustments', class: 'w-5 h-5 flex-shrink-0 stroke-2') %>
+              <span class="mr-1"><%= t('profile') %></span>
+            <% end %>
+          </li>
+          <% if can?(:read, EncryptedConfig.new(key: EncryptedConfig::ESIGN_CERTS_KEY, account: current_account)) %>
+            <li>
+              <%= link_to settings_esign_path, class: 'flex items-center' do %>
+                <%= svg_icon('zoom_check', class: 'w-5 h-5 flex-shrink-0 stroke-2') %>
+                <span class="mr-1 whitespace-nowrap"><%= t('verify_pdf') %></span>
+              <% end %>
+            </li>
+          <% end %>
+          <li>
+            <%= button_to destroy_user_session_path, method: :delete, data: { turbo: false }, class: 'flex items-center' do %>
+              <%= svg_icon('logout', class: 'w-5 h-5 flex-shrink-0 stroke-2 mr-2 inline') %>
+              <span class="mr-1 whitespace-nowrap"><%= t('sign_out') %></span>
+            <% end %>
+          </li>
+        </ul>
+      </div>
+    </div>
+  <% else %>
+    <div class="flex space-x-2 items-center">
+      <% unless on_landing_page? %>
+        <div class="dropdown dropdown-end">
+          <label tabindex="0" class="cursor-pointer btn btn-ghost btn-sm" title="<%= t('select_language') %>">
+            <%= svg_icon('world', class: 'w-5 h-5') %>
+            <span class="hidden md:inline ml-1"><%= t("language_#{I18n.locale}", default: AccountsController::LOCALE_OPTIONS[I18n.locale.to_s] || I18n.locale.to_s) %></span>
+          </label>
+          <ul tabindex="0" class="z-10 dropdown-content p-2 mt-2 shadow menu text-base bg-base-100 rounded-box min-w-[180px]">
+            <% locale_names = { 'en-US' => 'English (US)', 'en-GB' => 'English (UK)', 'nl-NL' => 'Nederlands', 'de-DE' => 'Deutsch', 'fr-FR' => 'Français', 'es-ES' => 'Español', 'pt-PT' => 'Português', 'it-IT' => 'Italiano' } %>
+            <% %w[en-US en-GB nl-NL de-DE fr-FR es-ES pt-PT it-IT].each do |locale| %>
+              <li>
+                <%= link_to root_path(lang: locale), class: "flex items-center #{'active' if I18n.locale.to_s == locale}" do %>
+                  <span><%= t("language_#{locale}", default: locale_names[locale] || locale) %></span>
+                  <% if I18n.locale.to_s == locale %>
+                    <span class="ml-auto">✓</span>
+                  <% end %>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+      <% if request.path != new_user_session_path && request.path != setup_index_path %>
+        <%= link_to new_user_session_path({ lang: params[:lang] }.compact_blank), class: 'font-medium text-lg' do %>
+          <span class="flex items-center justify-center space-x-1">
+            <%= svg_icon('login', class: 'w-6 h-6') %>
+            <span><%= t('sign_in') %></span>
+          </span>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+</div>

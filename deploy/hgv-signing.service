@@ -1,0 +1,69 @@
+[Unit]
+Description=HGV Signing - Document Signing Platform
+Documentation=https://github.com/your-org/HGV-Signing
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=hgv-signing
+Group=hgv-signing
+WorkingDirectory=/opt/hgv-signing/current
+
+# Load environment variables from configuration file
+EnvironmentFile=/etc/hgv-signing/hgv-signing.env
+
+# Set up rbenv environment
+Environment="RBENV_ROOT=/opt/rbenv"
+Environment="PATH=/opt/rbenv/shims:/opt/rbenv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Bundle configuration - gems are installed in vendor/bundle per release
+Environment="BUNDLE_PATH=/opt/hgv-signing/current/vendor/bundle"
+Environment="BUNDLE_DEPLOYMENT=true"
+Environment="BUNDLE_WITHOUT=development:test"
+
+# Verify bundle is accessible before starting
+ExecStartPre=/opt/rbenv/shims/bundle --version
+
+# Start Puma web server
+# Note: Puma will automatically start embedded Redis and Sidekiq via plugins
+# if MULTITENANT != 'true' (default behavior for single-tenant installations)
+ExecStart=/opt/rbenv/shims/bundle exec puma -C config/puma.rb
+
+# Graceful restart using Puma's phased restart feature (zero-downtime)
+# This sends SIGUSR1 signal to Puma, which will restart workers one by one
+ExecReload=/bin/kill -SIGUSR1 $MAINPID
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Graceful shutdown
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+# Allow access to application directories (shared and releases for symlink resolution)
+ReadWritePaths=/opt/hgv-signing/shared
+ReadWritePaths=/opt/hgv-signing/releases
+ReadWritePaths=/opt/hgv-signing/current
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hgv-signing
+
+[Install]
+WantedBy=multi-user.target

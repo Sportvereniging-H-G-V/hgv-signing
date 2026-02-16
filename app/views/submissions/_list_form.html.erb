@@ -1,0 +1,12 @@
+<%= form_for '', url: template_submissions_path(template), html: { class: 'space-y-4', autocomplete: 'off' }, data: { turbo_frame: :_top } do |f| %>
+  <div class="form-control">
+    <%= f.label :emails, t('bulk_send_from_spreadsheet'), class: 'label' %>
+    <%= f.text_area :emails, class: 'base-textarea w-full', rows: 6, placeholder: "email1@example.com\nemail2@example.com", required: true %>
+    <label class="label">
+      <span class="label-text-alt">Scheiding per regel of komma. Namen kun je optioneel toevoegen met het formaat <code>naam &lt;email&gt;</code>.</span>
+    </label>
+  </div>
+  <div class="form-control">
+    <%= f.button button_title(title: t('add_recipients')), class: 'base-button' %>
+  </div>
+<% end %>

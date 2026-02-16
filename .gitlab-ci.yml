@@ -1,0 +1,231 @@
+# =============================================================================
+# HGV-Signing GitLab CI/CD Pipeline
+# Bare-Metal Deployment Configuration
+# =============================================================================
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+stages:
+  - test
+  - deploy
+
+variables:
+  POSTGRES_DB: "hgv_signing_test"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "postgres"
+  DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/hgv_signing_test"
+  RAILS_ENV: "test"
+  NODE_ENV: "test"
+
+# =============================================================================
+# TEST STAGE
+# =============================================================================
+
+# Shared configuration for test jobs
+.test_base:
+  stage: test
+  image: ruby:3.4.2
+  services:
+    - postgres:15
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - vendor/bundle
+      - node_modules
+  before_script:
+    # Install system dependencies (suppress output)
+    - apt-get update -qq 2>&1 | tail -n 5
+    - |
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+        postgresql-client libpq-dev libvips-dev libvips42 \
+        wget curl imagemagick ca-certificates gnupg 2>&1 | tail -n 5
+
+    # Install Node.js 20.x from NodeSource (suppress output)
+    - mkdir -p /etc/apt/keyrings
+    - curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key 2>/dev/null | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg 2>&1 | tail -n 5
+    - echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list > /dev/null
+    - apt-get update -qq 2>&1 | tail -n 5
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs 2>&1 | tail -n 5
+    - echo "Node $(node --version), npm $(npm --version)"
+
+    # Install Yarn (suppress output)
+    - npm install -g yarn 2>&1 | tail -n 5
+    - echo "Yarn $(yarn --version)"
+
+    # Install Chrome for system tests
+    - wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - 2>&1 | tail -n 2
+    - echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+    - apt-get update -qq 2>&1 | tail -n 5
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq google-chrome-stable 2>&1 | tail -n 5
+    - echo "Chrome $(google-chrome --version)"
+
+    # Install PDFium library (suppress output)
+    - wget -q -O /tmp/pdfium-linux.tgz "https://github.com/docusealco/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz"
+    - mkdir -p /tmp/pdfium-linux && tar -xzf /tmp/pdfium-linux.tgz -C /tmp/pdfium-linux
+    - cp /tmp/pdfium-linux/lib/libpdfium.so /usr/lib/libpdfium.so && ldconfig
+    - rm -rf /tmp/pdfium-linux.tgz /tmp/pdfium-linux
+    - echo "PDFium installed"
+
+    # Install ONNX Runtime (suppress output)
+    - wget -q -O /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
+    - tar -xzf /tmp/onnxruntime.tgz -C /usr/local
+    - ln -sf /usr/local/onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3 /usr/lib/libonnxruntime.so.1
+    - ln -sf /usr/lib/libonnxruntime.so.1 /usr/lib/libonnxruntime.so && ldconfig
+    - rm /tmp/onnxruntime.tgz
+    - echo "ONNX Runtime installed"
+
+    # Install Ruby dependencies (suppress most output)
+    - bundle config set --local path 'vendor/bundle'
+    - bundle config set --local without 'development'
+    - bundle config set --local with 'test'
+    - echo "Installing gems..." && bundle install --jobs $(nproc) --retry 3 --quiet 2>&1 | tail -n 10
+
+    # Install Node dependencies (suppress output)
+    - echo "Installing node modules..." && yarn install --frozen-lockfile 2>&1 | tail -n 10
+
+    # Setup test database
+    - bundle exec rake db:create db:migrate RAILS_ENV=test 2>&1 | tail -n 10
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+# RSpec tests with minimal output
+rspec:
+  extends: .test_base
+  script:
+    - echo "Running RSpec tests..."
+    - bundle exec rspec --format progress --format RspecJunitFormatter --out rspec.xml
+
+  artifacts:
+    reports:
+      junit: rspec.xml
+    expire_in: 1 week
+    when: always
+
+# Rubocop code quality check (separate job)
+rubocop:
+  extends: .test_base
+  script:
+    - echo "Running Rubocop..."
+    - bundle exec rubocop --parallel --format simple
+  allow_failure: true
+
+# =============================================================================
+# DEPLOY PRODUCTION STAGE
+# =============================================================================
+
+deploy_production:
+  stage: deploy
+  image: alpine:3.20
+  needs:
+    - job: test
+      optional: true
+  tags:
+    - deploy
+  before_script:
+    # Install required tools
+    - apk add --no-cache openssh-client rsync bash curl
+
+    # Setup SSH
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H "$SSH_SERVER_HOST" >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+
+  script:
+    - echo "Deploying HGV-Signing to Production"
+    - echo "Tag ${CI_COMMIT_TAG}"
+    - echo "Commit ${CI_COMMIT_SHORT_SHA}"
+    - echo "Server ${SSH_SERVER_HOST}"
+
+    # Transfer code to server
+    - echo "Transferring code to server..."
+    - |
+      rsync -az --delete \
+        --exclude='.git' \
+        --exclude='node_modules' \
+        --exclude='tmp' \
+        --exclude='log' \
+        --exclude='coverage' \
+        --exclude='vendor/bundle' \
+        --exclude='.gitlab-ci.yml' \
+        -e "ssh -o StrictHostKeyChecking=no" \
+        ./ "${SSH_USER}@${SSH_SERVER_HOST}:/tmp/hgv-signing-deploy-${CI_COMMIT_TAG}/"
+
+    - echo "Code transferred to server"
+
+    # Run deployment script on server
+    - echo "Running deployment script on server"
+    - |
+      if ! ssh "${SSH_USER}@${SSH_SERVER_HOST}" "test -d /opt/hgv-signing"; then
+        echo "============================================================"
+        echo "ERROR: /opt/hgv-signing does not exist!"
+        echo "============================================================"
+        echo ""
+        echo "The server has not been prepared yet."
+        echo "Please run the server preparation script first:"
+        echo ""
+        echo "  sudo bash scripts/prepare_server.sh"
+        echo ""
+        echo "============================================================"
+        exit 1
+      fi
+    - ssh "${SSH_USER}@${SSH_SERVER_HOST}" "cd /opt/hgv-signing && CI_COMMIT_TAG=${CI_COMMIT_TAG} CI_PROJECT_DIR=/tmp/hgv-signing-deploy-${CI_COMMIT_TAG} bash -x /tmp/hgv-signing-deploy-${CI_COMMIT_TAG}/scripts/deploy.sh 2>&1"
+    - ssh "${SSH_USER}@${SSH_SERVER_HOST}" "rm -rf /tmp/hgv-signing-deploy-${CI_COMMIT_TAG}"
+
+    - echo "DEPLOYMENT SUCCESSFUL"
+
+  environment:
+    name: production
+    url: $DEPLOY_URL
+
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+# =============================================================================
+# MANUAL ROLLBACK JOB
+# =============================================================================
+
+rollback_production:
+  stage: deploy
+  image: alpine:3.20
+  when: manual
+  tags:
+    - deploy
+  before_script:
+    # Install required tools
+    - apk add --no-cache openssh-client bash
+
+    # Setup SSH
+    - eval "$(ssh-agent -s)"
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H "$SSH_SERVER_HOST" >> ~/.ssh/known_hosts
+
+  script:
+    - echo "MANUAL ROLLBACK TRIGGERED"
+    - echo "This will rollback the application to the previous release"
+
+    - |
+      ssh "${SSH_USER}@${SSH_SERVER_HOST}" '
+        set -euo pipefail
+        cd /opt/hgv-signing
+        echo yes | bash scripts/rollback.sh
+        echo "Rollback completed"
+      '
+
+  environment:
+    name: production
+    url: $DEPLOY_URL
+
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual

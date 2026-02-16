@@ -1,0 +1,76 @@
+<div class="block w-full md:w-52 flex-none">
+  <menu-active>
+    <ul id="account_settings_menu" class="menu px-0">
+      <li class="menu-title py-0 !bg-transparent mb-3 -mt-5"><a href="<%= '/' %>" class="!bg-transparent !text-neutral font-medium flex items-center space-x-0.5"><%= svg_icon('arrow_left', class: 'w-4 h-4 stroke-2') %><span><%= t('back') %></span></a></li>
+      <li class="menu-title py-0 !bg-transparent">
+        <span class="!bg-transparent"><%= t('settings') %></span>
+      </li>
+      <li></li>
+      <li>
+        <%= link_to t('profile'), settings_profile_index_path, class: 'text-base hover:bg-base-300' %>
+      </li>
+      <% unless current_user.role == User::EDITOR_ROLE %>
+      <li>
+        <%= link_to t('account'), settings_account_path, class: 'text-base hover:bg-base-300' %>
+      </li>
+      <% end %>
+      <% unless Docuseal.multitenant? %>
+        <% if can?(:read, EncryptedConfig.new(key: EncryptedConfig::EMAIL_SMTP_KEY, account: current_account)) && ENV['SMTP_ADDRESS'].blank? &&  true_user == current_user %>
+          <li>
+            <%= link_to t('email'), settings_email_index_path, class: 'text-base hover:bg-base-300' %>
+          </li>
+        <% end %>
+      <% end %>
+      <% if can?(:read, AccountConfig) %>
+        <li>
+          <%= link_to t('notifications'), settings_notifications_path, class: 'text-base hover:bg-base-300' %>
+        </li>
+      <% end %>
+      <% if can?(:read, EncryptedConfig.new(key: EncryptedConfig::ESIGN_CERTS_KEY, account: current_account)) %>
+        <li>
+          <%= link_to t('e_signature'), settings_esign_path, class: 'text-base hover:bg-base-300' %>
+        </li>
+      <% end %>
+      <% if can?(:read, AccountConfig) %>
+        <li>
+          <%= link_to t('personalization'), settings_personalization_path, class: 'text-base hover:bg-base-300' %>
+        </li>
+      <% end %>
+      <% if can?(:read, User) && current_user.role != User::EDITOR_ROLE %>
+        <li>
+          <%= link_to t('users'), settings_users_path, class: 'text-base hover:bg-base-300' %>
+        </li>
+      <% end %>
+      <%= render 'shared/settings_nav_extra' %>
+      <%= render 'shared/settings_nav_extra2' %>
+    </ul>
+  </menu-active>
+  <div id="support_channels" class="mx-4 border-t border-base-300 hidden md:block">
+    <div class="text-sm mt-3 font-medium">
+      Bugs / features doorgeven?
+    </div>
+    <div class="mt-3">
+      <a href="https://gitlab.rubenrikk.nl/hgv-hengelo/hgv-signing/-/issues" target="_blank" rel="noopener noreferrer" class="btn btn-primary w-full">
+        Open een issue op GitLab
+      </a>
+    </div>
+    <section class="app-about text-xs mt-4 space-y-2">
+      <p class="text-left leading-relaxed">
+        <% docuseal_link = link_to('Docuseal', 'https://github.com/docusealco/docuseal', target: '_blank', rel: 'noopener noreferrer') %>
+        <% license_link = link_to('GNU Affero General Public License v3 (AGPL-3.0)', 'https://www.gnu.org/licenses/agpl-3.0.html', target: '_blank', rel: 'noopener noreferrer') %>
+        <%= t('app_uses_customized_version_html', docuseal_link: docuseal_link, license_link: license_link).html_safe %>
+      </p>
+      <p class="text-left">
+        <%= t('source_code_of_this_version') %>:
+        <a href="https://gitlab.rubenrikk.nl/hgv-hengelo/hgv-signing/" target="_blank" rel="noopener noreferrer" class="break-all">
+          https://gitlab.rubenrikk.nl/hgv-hengelo/hgv-signing/
+        </a>
+      </p>
+    </section>
+    <% if Docuseal.version.present? %>
+      <span class="badge badge-outline text-xs block mx-auto mt-4">
+        v<%= Docuseal.version %>
+      </span>
+    <% end %>
+  </div>
+</div>
