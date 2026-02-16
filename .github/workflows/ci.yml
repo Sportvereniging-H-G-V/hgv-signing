@@ -62,7 +62,7 @@ jobs:
       - name: Install ONNX Runtime
         run: |
           wget -q -O /tmp/onnxruntime.tgz "https://github.com/microsoft/onnxruntime/releases/download/v1.16.3/onnxruntime-linux-x64-1.16.3.tgz"
-          tar -xzf /tmp/onnxruntime.tgz -C /usr/local
+          sudo tar -xzf /tmp/onnxruntime.tgz -C /usr/local
           sudo ln -sf /usr/local/onnxruntime-linux-x64-1.16.3/lib/libonnxruntime.so.1.16.3 /usr/lib/libonnxruntime.so.1
           sudo ln -sf /usr/lib/libonnxruntime.so.1 /usr/lib/libonnxruntime.so && sudo ldconfig
           rm /tmp/onnxruntime.tgz
