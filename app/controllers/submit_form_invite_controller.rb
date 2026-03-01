@@ -17,7 +17,7 @@ class SubmitFormInviteController < ApplicationController
     # Include required signers of hidden optional signers (e.g. when person is >= 16 the
     # 2nd signer is hidden, but the 3rd and 4th signers that depend on it must still be invited)
     cascaded_invite_submitters = find_cascaded_invite_submitters(submitter, optional_invite_submitters)
-    invite_submitters = invite_submitters + cascaded_invite_submitters
+    invite_submitters += cascaded_invite_submitters
 
     create_invited_submitters(submitter, invite_submitters, optional_invite_submitters)
 
@@ -90,10 +90,10 @@ class SubmitFormInviteController < ApplicationController
   def find_cascaded_invite_submitters(submitter, optional_invite_submitters)
     # Detect optional signers that were hidden in the form (their UUID was not submitted at all)
     # This happens when conditions prevent them from showing, e.g. age >= 16 hides the parent/guardian
-    submitted_uuids = submitters_attributes.map { |e| e[:uuid] }
+    submitted_uuids = submitters_attributes.pluck(:uuid)
     hidden_optional_uuids = optional_invite_submitters
-      .reject { |item| submitted_uuids.include?(item['uuid']) }
-      .map { |s| s['uuid'] }
+                            .reject { |item| submitted_uuids.include?(item['uuid']) }
+                            .pluck('uuid')
 
     return [] if hidden_optional_uuids.empty?
 
