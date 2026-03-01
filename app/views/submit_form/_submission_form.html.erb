@@ -4,16 +4,17 @@
   # Get all fields (not just current submitter's) for condition evaluation
   all_fields = Submissions.filtered_conditions_fields(submitter, only_submitter_fields: false)
 %>
-<% invite_submitters = (submitter.submission.template_submitters || submitter.submission.template.submitters).select { |s| s['invite_by_uuid'] == submitter.uuid && submitter.submission.submitters.none? { |e| e.uuid == s['uuid'] } }.to_json %>
-<% 
+<%
   # Filter optional invite submitters based on conditions
   all_submitters_values = submitter.submission.submitters.reduce({}) { |acc, sub| acc.merge(sub.values) }
   fields_index = submitter.submission.fields_uuid_index
   template_fields = submitter.submission.template_fields || submitter.submission.template.fields
-  optional_invite_submitters = (submitter.submission.template_submitters || submitter.submission.template.submitters).select do |s|
+  template_subs = submitter.submission.template_submitters || submitter.submission.template.submitters
+
+  optional_invite_submitters = template_subs.select do |s|
     next false unless s['optional_invite_by_uuid'] == submitter.uuid
     next false if submitter.submission.submitters.any? { |e| e.uuid == s['uuid'] }
-    
+
     # Check if submitter has conditions defined
     if s['conditions'].present?
       Submissions.check_item_conditions(s, all_submitters_values, fields_index, include_submitter_uuid: submitter.uuid)
@@ -36,6 +37,24 @@
         true
       end
     end
-  end.to_json
+  end
+
+  # Find optional submitters that are hidden (conditions not met, e.g. person is >= 16)
+  shown_optional_uuids = optional_invite_submitters.map { |s| s['uuid'] }
+  hidden_optional_uuids = template_subs
+    .select { |s| s['optional_invite_by_uuid'] == submitter.uuid && submitter.submission.submitters.none? { |e| e.uuid == s['uuid'] } }
+    .map { |s| s['uuid'] }
+    .reject { |uuid| shown_optional_uuids.include?(uuid) }
+
+  # Cascaded required signers: those with invite_by_uuid pointing to a hidden optional signer
+  cascaded_invite_submitters = hidden_optional_uuids.empty? ? [] : template_subs.select do |s|
+    hidden_optional_uuids.include?(s['invite_by_uuid']) &&
+    submitter.submission.submitters.none? { |e| e.uuid == s['uuid'] }
+  end
+
+  # Direct required invite submitters + cascaded ones
+  direct_invite_submitters = template_subs.select { |s| s['invite_by_uuid'] == submitter.uuid && submitter.submission.submitters.none? { |e| e.uuid == s['uuid'] } }
+  invite_submitters = (direct_invite_submitters + cascaded_invite_submitters).to_json
+  optional_invite_submitters = optional_invite_submitters.to_json
 %>
 <submission-form data-is-demo="<%= Docuseal.demo? %>" data-schema="<%= schema.to_json %>" data-reuse-signature="<%= configs[:reuse_signature] %>" data-require-signing-reason="<%= configs[:require_signing_reason] %>" data-with-signature-id="<%= configs[:with_signature_id] %>" data-with-confetti="<%= configs[:with_confetti] %>" data-completed-redirect-url="<%= submitter.preferences['completed_redirect_url'].presence || submitter.submission.template&.preferences&.dig('completed_redirect_url') %>" data-completed-message="<%= (configs[:completed_message]&.compact_blank.presence || submitter.submission.template&.preferences&.dig('completed_message') || {}).to_json %>" data-completed-button="<%= configs[:completed_button].to_json %>" data-go-to-last="<%= submitter.preferences.key?('go_to_last') ? submitter.preferences['go_to_last'] : submitter.opened_at? %>" data-submitter="<%= submitter.to_json(only: %i[uuid slug name phone email]) %>" data-can-send-email="<%= Accounts.can_send_emails?(submitter.submission.account) %>" data-optional-invite-submitters="<%= optional_invite_submitters %>" data-invite-submitters="<%= invite_submitters %>" data-attachments="<%= data_attachments %>" data-fields="<%= data_fields %>" data-all-fields="<%= all_fields.to_json %>" data-all-submitters-values="<%= all_submitters_values.to_json %>" data-values="<%= submitter.values.to_json %>" data-with-typed-signature="<%= configs[:with_typed_signature] %>" data-previous-signature-value="<%= local_assigns[:signature_attachment]&.uuid %>" data-dry-run="<%= local_assigns[:dry_run] %>" data-expand="<%= local_assigns[:expand] %>" data-scroll-padding="<%= local_assigns[:scroll_padding] %>" data-language="<%= I18n.locale.to_s.split('-').first %>"></submission-form>

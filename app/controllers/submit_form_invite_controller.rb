@@ -14,6 +14,11 @@ class SubmitFormInviteController < ApplicationController
 
     return head :unprocessable_content unless validate_optional_invites(submitter, optional_invite_submitters)
 
+    # Include required signers of hidden optional signers (e.g. when person is >= 16 the
+    # 2nd signer is hidden, but the 3rd and 4th signers that depend on it must still be invited)
+    cascaded_invite_submitters = find_cascaded_invite_submitters(submitter, optional_invite_submitters)
+    invite_submitters += cascaded_invite_submitters
+
     create_invited_submitters(submitter, invite_submitters, optional_invite_submitters)
 
     submitter.submission.submitters.reload
@@ -79,6 +84,24 @@ class SubmitFormInviteController < ApplicationController
       head :ok
     else
       head :unprocessable_content
+    end
+  end
+
+  def find_cascaded_invite_submitters(submitter, optional_invite_submitters)
+    # Detect optional signers that were hidden in the form (their UUID was not submitted at all)
+    # This happens when conditions prevent them from showing, e.g. age >= 16 hides the parent/guardian
+    submitted_uuids = submitters_attributes.pluck(:uuid)
+    hidden_optional_uuids = optional_invite_submitters
+                            .reject { |item| submitted_uuids.include?(item['uuid']) }
+                            .pluck('uuid')
+
+    return [] if hidden_optional_uuids.empty?
+
+    # Return required signers whose invite chain goes through a hidden optional signer
+    all_template_subs = submitter.submission.template_submitters || submitter.submission.template.submitters
+    all_template_subs.select do |s|
+      hidden_optional_uuids.include?(s['invite_by_uuid']) &&
+        submitter.submission.submitters.none? { |e| e.uuid == s['uuid'] }
     end
   end
 

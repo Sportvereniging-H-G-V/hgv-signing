@@ -15,15 +15,18 @@ module SigningFormHelper
       const wavelength = 30;
       const length = 300;
 
+      // signature_pad v5 checks event.buttons: 1 = button down, 0 = button up
       function dispatchPointerEvent(type, x, y) {
+        const buttons = type === 'pointerup' ? 0 : 1;
         const event = new PointerEvent(type, {
           pointerId: 1,
           pointerType: 'pen',
           isPrimary: true,
           clientX: x,
           clientY: y,
+          buttons: buttons,
           bubbles: true,
-          pressure: 0.5
+          pressure: type === 'pointerup' ? 0 : 0.5
         });
 
         canvas.dispatchEvent(event);
@@ -31,23 +34,15 @@ module SigningFormHelper
 
       dispatchPointerEvent('pointerdown', startX, startY);
 
-      let x = 0;
-      function drawStep() {
-        if (x > length) {
-          dispatchPointerEvent('pointerup', startX + x, startY);
-          return;
-        }
-
+      // Draw synchronously so pointerup runs before execute_script returns (signature_pad v5 listens for endStroke)
+      for (let x = 0; x <= length; x += 5) {
         const y = startY + amplitude * Math.sin((x / wavelength) * 2 * Math.PI);
         dispatchPointerEvent('pointermove', startX + x, y);
-        x += 5;
-        requestAnimationFrame(drawStep);
       }
-
-      drawStep();
+      dispatchPointerEvent('pointerup', startX + length, startY);
     JS
 
-    sleep 0.1
+    sleep 0.2
   end
 
   def field_value(submitter, field_name)
